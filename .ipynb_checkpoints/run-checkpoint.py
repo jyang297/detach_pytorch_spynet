@@ -4,8 +4,7 @@ import getopt
 import math
 import numpy
 import PIL
-import PIL.Image as Image
-import numpy as np
+import PIL.Image
 import sys
 import torch
 from matrix_moving import matrixs_moving
@@ -170,8 +169,8 @@ def estimate(tenOne, tenTwo):
 ##########################################################
 
 if __name__ == '__main__':
-    tenOne = torch.FloatTensor(numpy.ascontiguousarray(numpy.array(Image.open(args_strOne))[:, :, ::-1].transpose(2, 0, 1).astype(numpy.float32) * (1.0 / 255.0)))
-    tenTwo = torch.FloatTensor(numpy.ascontiguousarray(numpy.array(Image.open(args_strTwo))[:, :, ::-1].transpose(2, 0, 1).astype(numpy.float32) * (1.0 / 255.0)))
+    tenOne = torch.FloatTensor(numpy.ascontiguousarray(numpy.array(PIL.Image.open(args_strOne))[:, :, ::-1].transpose(2, 0, 1).astype(numpy.float32) * (1.0 / 255.0)))
+    tenTwo = torch.FloatTensor(numpy.ascontiguousarray(numpy.array(PIL.Image.open(args_strTwo))[:, :, ::-1].transpose(2, 0, 1).astype(numpy.float32) * (1.0 / 255.0)))
 
 
     matrix_1 = matrixs_moving(num_frames=2, initial_position=(10, 0), matrix_size=1000, block_size=80).unsqueeze(0)
@@ -183,17 +182,29 @@ if __name__ == '__main__':
     tenOutput, tenFlow_list = estimate(tenOne, tenTwo)
 
     
-    for i in range(len(tenFlow_list)):
-        for j in range(tenFlow_list[i].shape[0]):
-            slice_numpy = tenFlow_list[-1].cpu().numpy()
+    
+    slice_numpy = tenFlow_list[-1].numpy()
 
+    # 为了转换为图像，我们通常会重新调整值的范围
+    # 首先，将其范围调整到 [0, 1]
+    slice_numpy = (slice_numpy - slice_numpy.min()) / (slice_numpy.max() - slice_numpy.min())
 
-            slice_numpy = (slice_numpy - slice_numpy.min()) / (slice_numpy.max() - slice_numpy.min())
+    # 然后，将其转换为 [0, 255] 并转换为 uint8 类型
+    slice_numpy = (slice_numpy * 255).astype(np.uint8)
 
-            slice_numpy = (slice_numpy * 255).astype(np.uint8)
+    # 使用 PIL 创建图像
+    image = Image.fromarray(slice_numpy)
 
-            image = Image.fromarray(slice_numpy[0,0])
+    # 保存图像到文件
+    image.save("output_image.png")
 
+    print("Image saved as output_image.png")
+    
+    objOutput = open(args_strOut, 'wb')
 
+    numpy.array([ 80, 73, 69, 72 ], numpy.uint8).tofile(objOutput)
+    numpy.array([ tenOutput.shape[2], tenOutput.shape[1] ], numpy.int32).tofile(objOutput)
+    numpy.array(tenOutput.numpy().transpose(1, 2, 0), numpy.float32).tofile(objOutput)
 
+    objOutput.close()
 # end
