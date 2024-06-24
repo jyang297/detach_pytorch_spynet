@@ -191,7 +191,7 @@ if __name__ == '__main__':
     #         print(tenFlow_list[i].shape)
             
     
-    tenFlow_421 = [tenFlow_list[-1], tenFlow_list[-2], tenFlow_list[-3]]
+    tenFlow_421 = [tenFlow_list[-3], tenFlow_list[-2], tenFlow_list[-1]]
     print("pick up")
     print(tenFlow_421[0].shape)
 
