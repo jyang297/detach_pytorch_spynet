@@ -4,11 +4,10 @@ import getopt
 import math
 import numpy
 import PIL
-import PIL.Image as Image
-import numpy as np
+import PIL.Image
 import sys
 import torch
-from matrix_moving import matrixs_moving
+
 ##########################################################
 
 torch.set_grad_enabled(False) # make sure to not compute gradients for computational performance
@@ -18,9 +17,9 @@ torch.backends.cudnn.enabled = True # make sure to use cudnn for computational p
 ##########################################################
 
 args_strModel = 'sintel-final' # 'sintel-final', or 'sintel-clean', or 'chairs-final', or 'chairs-clean', or 'kitti-final'
-args_strOne = '/root/spynetCheck/detach_pytorch_spynet/images/one.png'
-args_strTwo = '/root/spynetCheck/detach_pytorch_spynet/images/two.png'
-args_strOut = '/root/spynetCheck/detach_pytorch_spynet/out.flo'
+args_strOne = './images/one.png'
+args_strTwo = './images/two.png'
+args_strOut = './out.flo'
 
 for strOption, strArg in getopt.getopt(sys.argv[1:], '', [
     'model=',
@@ -114,7 +113,7 @@ class Network(torch.nn.Module):
         # end
 
         tenFlow = tenOne[0].new_zeros([ tenOne[0].shape[0], 2, int(math.floor(tenOne[0].shape[2] / 2.0)), int(math.floor(tenOne[0].shape[3] / 2.0)) ])
-        tenFlow_list = []
+
         for intLevel in range(len(tenOne)):
             tenUpsampled = torch.nn.functional.interpolate(input=tenFlow, scale_factor=2, mode='bilinear', align_corners=True) * 2.0
 
@@ -122,13 +121,9 @@ class Network(torch.nn.Module):
             if tenUpsampled.shape[3] != tenOne[intLevel].shape[3]: tenUpsampled = torch.nn.functional.pad(input=tenUpsampled, pad=[ 0, 1, 0, 0 ], mode='replicate')
 
             tenFlow = self.netBasic[intLevel](torch.cat([ tenOne[intLevel], backwarp(tenInput=tenTwo[intLevel], tenFlow=tenUpsampled), tenUpsampled ], 1)) + tenUpsampled
-            tenFlow_list.append(tenFlow.clone())
         # end
-        
-        
-        
 
-        return tenFlow, tenFlow_list
+        return tenFlow
     # end
 # end
 
@@ -143,58 +138,45 @@ def estimate(tenOne, tenTwo):
         netNetwork = Network().cuda().eval()
     # end
 
+    assert(tenOne.shape[1] == tenTwo.shape[1])
+    assert(tenOne.shape[2] == tenTwo.shape[2])
 
-    intWidth = tenOne.shape[3]
-    intHeight = tenOne.shape[2]
+    intWidth = tenOne.shape[2]
+    intHeight = tenOne.shape[1]
 
-    # assert(intWidth == 1024) # remember that there is no guarantee for correctness, comment this line out if you acknowledge this and want to continue
-    # assert(intHeight == 416) # remember that there is no guarantee for correctness, comment this line out if you acknowledge this and want to continue
+    assert(intWidth == 1024) # remember that there is no guarantee for correctness, comment this line out if you acknowledge this and want to continue
+    assert(intHeight == 416) # remember that there is no guarantee for correctness, comment this line out if you acknowledge this and want to continue
 
-    tenPreprocessedOne = tenOne.cuda()
-    tenPreprocessedTwo = tenTwo.cuda()
+    tenPreprocessedOne = tenOne.cuda().view(1, 3, intHeight, intWidth)
+    tenPreprocessedTwo = tenTwo.cuda().view(1, 3, intHeight, intWidth)
 
     intPreprocessedWidth = int(math.floor(math.ceil(intWidth / 32.0) * 32.0))
     intPreprocessedHeight = int(math.floor(math.ceil(intHeight / 32.0) * 32.0))
 
     tenPreprocessedOne = torch.nn.functional.interpolate(input=tenPreprocessedOne, size=(intPreprocessedHeight, intPreprocessedWidth), mode='bilinear', align_corners=False)
     tenPreprocessedTwo = torch.nn.functional.interpolate(input=tenPreprocessedTwo, size=(intPreprocessedHeight, intPreprocessedWidth), mode='bilinear', align_corners=False)
-    tenFlow, tenFlow_list  = netNetwork(tenPreprocessedOne, tenPreprocessedTwo)
-    tenFlow= torch.nn.functional.interpolate(input=tenFlow, size=(intHeight, intWidth), mode='bilinear', align_corners=False)
+
+    tenFlow = torch.nn.functional.interpolate(input=netNetwork(tenPreprocessedOne, tenPreprocessedTwo), size=(intHeight, intWidth), mode='bilinear', align_corners=False)
 
     tenFlow[:, 0, :, :] *= float(intWidth) / float(intPreprocessedWidth)
     tenFlow[:, 1, :, :] *= float(intHeight) / float(intPreprocessedHeight)
 
-    # return tenFlow[0, :, :, :].cpu()
-    return tenFlow, tenFlow_list
+    return tenFlow[0, :, :, :].cpu()
 # end
 
 ##########################################################
 
 if __name__ == '__main__':
-    tenOne = torch.FloatTensor(numpy.ascontiguousarray(numpy.array(Image.open(args_strOne))[:, :, ::-1].transpose(2, 0, 1).astype(numpy.float32) * (1.0 / 255.0)))
-    tenTwo = torch.FloatTensor(numpy.ascontiguousarray(numpy.array(Image.open(args_strTwo))[:, :, ::-1].transpose(2, 0, 1).astype(numpy.float32) * (1.0 / 255.0)))
+    tenOne = torch.FloatTensor(numpy.ascontiguousarray(numpy.array(PIL.Image.open(args_strOne))[:, :, ::-1].transpose(2, 0, 1).astype(numpy.float32) * (1.0 / 255.0)))
+    tenTwo = torch.FloatTensor(numpy.ascontiguousarray(numpy.array(PIL.Image.open(args_strTwo))[:, :, ::-1].transpose(2, 0, 1).astype(numpy.float32) * (1.0 / 255.0)))
 
+    tenOutput = estimate(tenOne, tenTwo)
 
-    matrix_1 = matrixs_moving(num_frames=2, initial_position=(10, 0), matrix_size=224, block_size=80).unsqueeze(0)
-    matrix_2 = matrixs_moving(num_frames=2, initial_position=(10, 0), matrix_size=224, block_size=80).unsqueeze(0)
-    
-    tenOne = torch.cat([matrix_1[:,0], matrix_2[:,0]], dim=0)
-    tenTwo = torch.cat([matrix_1[:,1], matrix_2[:,1]], dim=0)
-    
-    print("start")
-    tenOutput, tenFlow_list = estimate(tenOne, tenTwo)
+    objOutput = open(args_strOut, 'wb')
 
-    # for i in [-1, -2, -3]:
-    # # for i in range(len(tenFlow_list)):
-    #     for j in range(tenFlow_list[i].shape[0]):
-    #         print("tenFlow_",i," has shape:")
-    #         print(tenFlow_list[i].shape)
-            
-    
-    tenFlow_421 = [tenFlow_list[-1], tenFlow_list[-2], tenFlow_list[-3]]
-    print("pick up")
-    print(tenFlow_421[0].shape)
+    numpy.array([ 80, 73, 69, 72 ], numpy.uint8).tofile(objOutput)
+    numpy.array([ tenOutput.shape[2], tenOutput.shape[1] ], numpy.int32).tofile(objOutput)
+    numpy.array(tenOutput.numpy().transpose(1, 2, 0), numpy.float32).tofile(objOutput)
 
-
-
+    objOutput.close()
 # end
