@@ -117,7 +117,6 @@ class Network(torch.nn.Module):
 
         tenFlow = tenOne[0].new_zeros([ tenOne[0].shape[0], 2, int(math.floor(tenOne[0].shape[2] / 2.0)), int(math.floor(tenOne[0].shape[3] / 2.0)) ])
         tenFlow_list = []
-        print("len(tenOne)", len(tenOne))
         for intLevel in range(len(tenOne)):
             tenUpsampled = torch.nn.functional.interpolate(input=tenFlow, scale_factor=2, mode='bilinear', align_corners=True) * 2.0
 
@@ -165,7 +164,6 @@ def estimate(netNetwork, tenOne, tenTwo):
     tenOne = pad_to_multiple_of_32(tenOne.cuda())
     tenTwo = pad_to_multiple_of_32(tenTwo.cuda())
     
-    print("estimate pad tenOne.shape", tenOne.shape)
     
     tenFlow_list  = netNetwork(tenOne, tenTwo)
 
@@ -191,25 +189,14 @@ if __name__ == '__main__':
     tenOne = torch.cat([matrix_1[:,0], matrix_2[:,0]], dim=0)
     tenTwo = torch.cat([matrix_1[:,1], matrix_2[:,1]], dim=0)
     
-    print("start")
-
+    
+    # Usage
     netNetwork = Network()
-    netNetwork.load_pretrained_weights(file_path='spynet-sintel.pth')
+    netNetwork.load_pretrained_weights(file_path='./spynet-sintel.pth')
     netNetwork = Network().cuda().eval()
     tenFlow_list = estimate(netNetwork=netNetwork, tenOne=tenOne, tenTwo=tenTwo)
 
-    # for i in [-1, -2, -3]:
-    # # for i in range(len(tenFlow_list)):
-    #     for j in range(tenFlow_list[i].shape[0]):
-    #         print("tenFlow_",i," has shape:")
-    #         print(tenFlow_list[i].shape)
-            
-
-
-    
     tenFlow_421 = [tenFlow_list[-3], tenFlow_list[-2], tenFlow_list[-1]]
-    print("pick up")
-    print(tenFlow_421[0].shape)
 
 
 
